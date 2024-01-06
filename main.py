@@ -5,7 +5,8 @@ from app.api.user import router as user_router
 from app.api.product import router as product_router
 from app.api.category import router as category_router
 from app.api.order import router as order_router
-#from app.api.summary import router as summary_router
+from app.api.summary import router as summary_router
+
 
 
 app = FastAPI()
@@ -27,4 +28,4 @@ app.include_router(user_router)
 app.include_router(product_router)
 app.include_router(category_router)
 app.include_router(order_router)
-#app.include_router(summary_router)
+app.include_router(summary_router)

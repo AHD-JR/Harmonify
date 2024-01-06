@@ -1,6 +1,6 @@
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from typing import List
-from datetime import datetime
+from datetime import datetime, timezone, timedelta
 from enum import Enum
 
 class UserCredentials(BaseModel):
@@ -41,15 +41,23 @@ class PaymentType(str, Enum):
     pos = "POS"
     debt = "Debt"
 
+class OrderType(str, Enum):
+    instant_order = "Instant Order"
+    shipment = "Shipment"
+
 class Order(BaseModel):
     items: List[Product]
     customer: str
-    orderType: str
+    orderType: OrderType = OrderType.instant_order
     receiptNo: int
-    createdAt: datetime = datetime.now
-    createdBy: str
+    createdAt: datetime = datetime.now(timezone(timedelta(hours=1)))
+    createdBy: str = Field(None, alias='createdBy')
     revoked: bool = False
     paymentType: PaymentType = PaymentType.cash
     paidTotal: int
     qtySold: int
     totalSale: int
+
+    class Config:
+        allow_populate_by_field_name = True
+        arbitrary_types_allowed = True
