@@ -4,7 +4,6 @@ from app.db import db
 from bson import ObjectId
 from fastapi.responses import JSONResponse
 from app.serializers import product_serializer
-from typing import List
 from app.api.category import categoryTable
 from app.utils import oauth2, permissions
 

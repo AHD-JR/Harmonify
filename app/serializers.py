@@ -7,6 +7,14 @@ def user_serializer(user):
         "email": user["username"]
     }
 
+def try_user_serializer(user):
+    return {
+        "id": str(user["_id"]),
+        "username": user["username"],
+        "role": user["role"]
+    }
+
+
 def login_serializer(user):
     return{
         "username": user["username"],
@@ -36,7 +44,7 @@ def order_serializer(order):
         "orderType": order["orderType"],
         "receiptNo": order["receiptNo"],
         "createdAt": str(order["createdAt"]),
-        "createdBy": order["createdBy"],
+        "createdBy": str(order["createdBy"]),
         "revoked": order["revoked"],
         "paymentType": order["paymentType"],
         "paidTotal": order["paidTotal"]

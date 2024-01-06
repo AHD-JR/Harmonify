@@ -21,6 +21,7 @@ def create_order(req: Order, current_user: User = Depends(oauth2.get_current_use
         costumer = order_object["customer"] or ("Customer #" + str(order_count))
         order_object["customer"] = costumer
         order_object["receiptNo"] = order_count
+        order_object['createdBy'] = current_user['id']
         customer_id_ref = orderTable.insert_one(order_object)
         new_order = orderTable.find_one({'_id': customer_id_ref.inserted_id})
         return JSONResponse(status_code=status.HTTP_200_OK, content=order_serializer(new_order))

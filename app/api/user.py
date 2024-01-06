@@ -2,10 +2,8 @@ from fastapi import APIRouter, HTTPException, status, Depends
 from fastapi.responses import JSONResponse
 from app.schema import User, GetUser
 from app.db import db
-from app.utils.hashing import hash, verify
-from pymongo.errors import DuplicateKeyError
+from app.utils.hashing import hash
 from bson import ObjectId
-from typing import List
 from app.serializers import user_serializer
 from app.utils import oauth2, permissions
 

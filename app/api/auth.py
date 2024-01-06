@@ -4,7 +4,7 @@ from fastapi.security import OAuth2PasswordRequestForm
 from app.utils import jwt
 from app.api.user import userTable
 from app.utils.hashing import hash, verify
-from app.serializers import user_serializer, login_serializer
+from app.serializers import user_serializer, try_user_serializer
 
 
 router = APIRouter(
@@ -26,7 +26,7 @@ def login(req: OAuth2PasswordRequestForm = Depends()):
             raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail={'msg': 'Incorrect password!'})
     
     
-    access_token = jwt.create_access_token(data={'info': login_serializer(user)})
+    access_token = jwt.create_access_token(data={'info': try_user_serializer(user)})
 
     res = {
         'access_token': access_token,

@@ -1,136 +1,157 @@
-"""from fastapi import APIRouter, status, HTTPException
-from fastapi.responses import JSONResponse
+from fastapi import APIRouter, HTTPException, Depends
 from datetime import datetime, timezone, timedelta
-from app.api.user import userTable
-from app.api.product import productTable
 from app.api.order import orderTable
-from typing import List
+from app.utils import permissions
+from app.schema import User, OrderType
 
 router = APIRouter(
-    tags=['Sumarry'],
-    prefix='/api'
+    prefix='/api',
+    tags=['Summary']
 )
 
 
-router = APIRouter()
-
-def calculate_total_sale(item_qty, item_price):
-    return item_qty * item_price
-
-@router.get("/get_summary_today", response_model=List[dict])
-def get_summary_today():
+@router.get("/get_summary_today")
+def get_summary_today(current_user: User = Depends(permissions.is_admin)):
     try:
-        D = datetime.now(timezone(timedelta(hours=1)))
-        today = D.replace(hour=0, minute=0, second=0, microsecond=0)
+        date = datetime.now(timezone(timedelta(hours=1)))
+        today = date.replace(hour=0, minute=0, microsecond=0)
         todayISO = today.isoformat()
 
-        all_staff = userTable.all().values('_id', 'username', 'name')
-        all_orders = orderTable.filter(createdAt__gt=todayISO, revoked=False).prefetch_related('items')
+        pipeline = [
+            {
+                "$match": {
+                    "createdAt": {"$gte": datetime.fromisoformat(todayISO)},
+                    "$or": [{"orderType": OrderType.instant_order}, {"orderType": OrderType.shipment}],
+                    "revoked": False,
+                }
+            },
+            {
+                "$unwind": "$items"
+            },
+            {
+                "$group": {
+                    "_id": "$createdBy",
+                    "items": {
+                        "$push": {
+                            "name": "$items.name",
+                            "price": "$items.price",
+                            "quantity": "$items.quantity",
+                            "total": {
+                                "$multiply": ["$items.price", "$items.quantity"]
+                            },
+                        }
+                    },
+                    "totalSales": {
+                        "$sum": {
+                            "$sum": {
+                                "$multiply": ["$items.price", "$items.quantity"]
+                            }
+                        }
+                    },
+                }
+            },
+            {
+                "$lookup": {
+                    "from": "users",
+                    "localField": "_id",
+                    "foreignField": "_id",
+                    "as": "user"
+                }
+            },
+            {
+                "$unwind": "$user"
+            },
+            {
+                "$group": {
+                    "_id": '$host',
+                    "users": {
+                        "$push": {"username": "$user.username", "totalSales": "$totalSales", "items": "$items"}
+                    },
+                    "overallTotalSales": {"$sum": "$totalSales"}
+                }
+            },
+        ]
 
-        grouped_orders = {}
-        for order in all_orders:
-            if order.createdBy in grouped_orders:
-                grouped_orders[order.createdBy].append(order)
-            else:
-                grouped_orders[order.createdBy] = [order]
+        result = list(orderTable.aggregate(pipeline))
 
-        grouped_orders_array = []
-        for key, orders in grouped_orders.items():
-            host = next((staff for staff in all_staff if str(staff['_id']) == key), None) or {'name': 'Unknown', 'username': 'Unknown'}
-            items = []
-            for order in orders:
-                for item in order.items:
-                    item_data = {
-                        'name': item.name,
-                        'qtySold': item.quantity,
-                        'totalSale': calculate_total_sale(item.quantity, item.price)
-                    }
-                    items.append(item_data)
-            grouped_orders_array.append({'host': host, 'items': items})
-
-        grouped_orders_array_with_duplicates = []
-        for host_data in grouped_orders_array:
-            items = []
-            for item in host_data['items']:
-                existing_item = next((i for i in items if i['name'] == item['name']), None)
-                if existing_item:
-                    existing_item['qtySold'] += item['qtySold']
-                    existing_item['totalSale'] += item['totalSale']
-                else:
-                    items.append(item)
-            total_sale = sum(item['totalSale'] for item in items)
-            grouped_orders_array_with_duplicates.append({'host': host_data['host'], 'items': items, 'totalSale': total_sale})
-
-        return grouped_orders_array_with_duplicates
-
+        return result
     except Exception as e:
-        raise HTTPException(status_code=500, detail="Internal server error")
+        raise HTTPException(status_code=500, detail=str(e))
 
 
-
-@router.post('/summary_date_to_date')
-def get_summary_date_to_date(start_date: str, end_date: str):
+@router.get("/get_summary_date_to_date")
+def get_summary_date_to_date(start_date, end_date, current_user: User = Depends(permissions.is_admin)):
     try:
-        start_dt = datetime.strptime(start_date, "%Y-%m-%d")
-        end_dt = datetime.strptime(end_date, "%Y-%m-%d")
-        end_dt = end_dt.replace(hour=23, minute=59, second=59, microsecond=999)
-        
-        all_orders = list(orderTable.find({
-            "createdAt": {"$gt": start_dt, "$lt": end_dt},
-            "revoked": False
-        }))
+        from_date = datetime.strptime(start_date, '%Y-%m-%d')
+        to_date = datetime.strptime(end_date, '%Y-%m-%d')
 
-    
-        
-        all_staff = list(userTable.find({}))
-        print(all_staff)
-        
-        grouped_orders = {}
-        for order in all_orders:
-            if order["createdBy"] not in grouped_orders:
-                grouped_orders[order["createdBy"]] = []
-            grouped_orders[order["createdBy"]].append(order)
-        
-        grouped_orders_array = []
-        for key, group in grouped_orders.items():
-            host = next((staff for staff in all_staff if str(staff["_id"]) == key), {"name": "Unknown", "username": "Unknown"})
-            items = []
-            for order in group:
-                for item in order["items"]:
-                    items.append({
-                        "name": item["item"]["name"],
-                        "qtySold": item["quantity"],
-                        "price": item["item"]["price"],
-                        "totalSale": item["quantity"] * item["item"]["price"]
-                    })
-            grouped_orders_array.append({
-                "host": host,
-                "items": items
-            })
-        
-        grouped_orders_with_duplicates = []
-        for host_data in grouped_orders_array:
-            items_dict = {}
-            for item in host_data["items"]:
-                if item["name"] not in items_dict:
-                    items_dict[item["name"]] = {
-                        "qtySold": item["qtySold"],
-                        "totalSale": item["totalSale"]
-                    }
-                else:
-                    items_dict[item["name"]]["qtySold"] += item["qtySold"]
-                    items_dict[item["name"]]["totalSale"] += item["totalSale"]
-            items = [{"name": name, **data} for name, data in items_dict.items()]
-            total_sale = sum(item["totalSale"] for item in items)
-            grouped_orders_with_duplicates.append({
-                "host": host_data["host"],
-                "items": items,
-                "totalSale": total_sale
-            })
-        
-        return {"orders": grouped_orders_with_duplicates}
+        from_date = from_date.replace(hour=0, minute=0, second=0, microsecond=0)
+        to_date = to_date.replace(hour=23, minute=59, second=59, microsecond=999)
+
+        lagos_timezone = timezone(timedelta(hours=1))
+        from_date = from_date.replace(tzinfo=lagos_timezone)
+        to_date = to_date.replace(tzinfo=lagos_timezone)
+
+        from_date_iso = datetime.fromisoformat(str(from_date))
+        to_date_iso = datetime.fromisoformat(str(to_date))
+
+        pipeline = [
+            {
+                "$match": {
+                    "createdAt": {"$gte": from_date_iso, "$lte": to_date_iso},
+                    "$or": [{"orderType": OrderType.instant_order}, {"orderType": OrderType.shipment}],
+                    "revoked": False,
+                }
+            },
+            {
+                "$unwind": "$items"
+            },
+            {
+                "$group": {
+                    "_id": "$createdBy",
+                    "items": {
+                        "$push": {
+                            "name": "$items.name",
+                            "price": "$items.price",
+                            "quantity": "$items.quantity",
+                            "total": {
+                                "$multiply": ["$items.price", "$items.quantity"]
+                            },
+                        }
+                    },
+                    "totalSales": {
+                        "$sum": {
+                            "$sum": {
+                                "$multiply": ["$items.price", "$items.quantity"]
+                            }
+                        }
+                    },
+                }
+            },
+            {
+                "$lookup": {
+                    "from": "users",
+                    "localField": "_id",
+                    "foreignField": "_id",
+                    "as": "user"
+                }
+            },
+            {
+                "$unwind": "$user"
+            },
+            {
+                "$group": {
+                    "_id": '$host',
+                    "users": {
+                        "$push": {"username": "$user.username", "totalSales": "$totalSales", "items": "$items"}
+                    },
+                    "overallTotalSales": {"$sum": "$totalSales"}
+                }
+            },
+        ]
+
+        result = list(orderTable.aggregate(pipeline))
+
+        return result
     except Exception as e:
-        raise HTTPException(status_code=400, detail=str(e))
-
-
-"""
+        raise HTTPException(status_code=500, detail=str(e))

@@ -2,6 +2,7 @@ from jose import jwt, JWTError
 from datetime import datetime, timedelta
 import os
 from dotenv import load_dotenv
+from bson import ObjectId
 
 load_dotenv()
 
@@ -23,13 +24,13 @@ def create_access_token(data: dict):
 
 def verify_token(token: str, credentials_exception):
         payload = decode_token(token, credentials_exception)
-        print("passed!")
         user_object = payload.get('info')
+        id = ObjectId(user_object['id'])
         username: str = user_object['username']
         role: int = user_object['role']
         if (username is None) or (role is None):
             raise credentials_exception
-        return {'username': username, 'role': role}
+        return {'id': id, 'username': username, 'role': role}
 
     
 

@@ -3,7 +3,6 @@ from fastapi.responses import JSONResponse
 from app.schema import Category, User
 from app.db import db
 from app.serializers import category_serializer
-from typing import List
 from bson import ObjectId
 from app.utils import oauth2, permissions
 
